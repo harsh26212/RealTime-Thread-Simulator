@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ThreadOS — Multi-threaded Simulator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+/* ─── CSS VARIABLES ─── */
+:root {
+  --bg: #0a0c10;
+  --bg2: #0f1117;
+  --bg3: #151821;
+  --bg4: #1c2030;
+  --border: rgba(255,255,255,0.07);
+  --border2: rgba(255,255,255,0.12);
+  --text: #e2e8f0;
+  --text-muted: #64748b;
+  --text-dim: #94a3b8;
+  --accent: #00d4ff;
+  --accent2: #7c3aed;
+  --green: #06d6a0;
+  --yellow: #ffd166;
+  --red: #ff6b6b;
+  --orange: #f97316;
+  --purple: #a855f7;
+  --radius: 10px;
+  --font-mono: 'IBM Plex Mono', monospace;
+  --font-sans: 'Space Grotesk', sans-serif;
+  --shadow: 0 4px 24px rgba(0,0,0,0.4);
+}
+[data-theme="light"] {
+  --bg: #f0f4f8;
+  --bg2: #e8edf3;
+  --bg3: #fff;
+  --bg4: #f8fafc;
+  --border: rgba(0,0,0,0.08);
+  --border2: rgba(0,0,0,0.15);
+  --text: #1e293b;
+  --text-muted: #64748b;
+  --text-dim: #475569;
+  --shadow: 0 4px 24px rgba(0,0,0,0.12);
+}
+
+/* ─── RESET & BASE ─── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--font-sans); font-size: 13px; overflow-x: hidden; }
+::-webkit-scrollbar { width: 4px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+/* ─── TOPBAR ─── */
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 20px; height: 52px;
+  background: var(--bg2); border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; z-index: 100;
+}
+.topbar-brand { display: flex; align-items: center; gap: 10px; }
+.topbar-logo {
+  width: 32px; height: 32px; border-radius: 8px;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; font-weight: 700; font-family: var(--font-mono); color: #fff;
+}
+.topbar-title { font-family: var(--font-mono); font-size: 15px; font-weight: 600; letter-spacing: -0.5px; }
+.topbar-sub { font-size: 10px; color: var(--text-muted); font-family: var(--font-mono); }
+.topbar-right { display: flex; align-items: center; gap: 10px; }
+.topbar-stats { display: flex; gap: 16px; }
+.stat-pill { display: flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); }
+.stat-pill strong { color: var(--text); font-size: 13px; }
+.stat-pill .dot { width: 6px; height: 6px; border-radius: 50%; }
+.dot-green { background: var(--green); box-shadow: 0 0 6px var(--green); }
+.dot-yellow { background: var(--yellow); }
+.dot-red { background: var(--red); }
+.dot-accent { background: var(--accent); }
+
+/* ─── TABS ─── */
+.tabs { display: flex; gap: 2px; padding: 0 20px; background: var(--bg2); border-bottom: 1px solid var(--border); }
+.tab-btn {
+  padding: 10px 18px; font-family: var(--font-mono); font-size: 11px; font-weight: 500;
+  color: var(--text-muted); background: none; border: none; cursor: pointer;
+  border-bottom: 2px solid transparent; transition: all 0.2s; letter-spacing: 0.5px;
+}
+.tab-btn:hover { color: var(--text); }
+.tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+.tab-panel { display: none; } .tab-panel.active { display: block; }
+
+/* ─── LAYOUT ─── */
+.layout { display: grid; grid-template-columns: 280px 1fr; min-height: calc(100vh - 104px); }
+.sidebar {
+  background: var(--bg2); border-right: 1px solid var(--border);
+  padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 14px;
+}
+.main-area { padding: 16px; display: flex; flex-direction: column; gap: 14px; overflow-y: auto; }
+
+/* ─── PANELS ─── */
+.panel {
+  background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius);
+  overflow: hidden;
+}
+.panel-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px; border-bottom: 1px solid var(--border);
+  background: var(--bg4);
+}
+.panel-title { font-family: var(--font-mono); font-size: 10px; font-weight: 600; letter-spacing: 1px; color: var(--text-muted); text-transform: uppercase; }
+.panel-body { padding: 12px; }
+
+/* ─── CONTROLS ─── */
+.ctrl-group { display: flex; flex-direction: column; gap: 6px; }
+.ctrl-label { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); letter-spacing: 0.5px; text-transform: uppercase; }
+.ctrl-select, .ctrl-input {
+  width: 100%; padding: 7px 10px; border-radius: 6px;
+  background: var(--bg4); border: 1px solid var(--border2);
+  color: var(--text); font-family: var(--font-mono); font-size: 11px;
+  outline: none; transition: border-color 0.2s;
+}
+.ctrl-select:focus, .ctrl-input:focus { border-color: var(--accent); }
+.ctrl-range { width: 100%; accent-color: var(--accent); }
+.ctrl-row { display: flex; align-items: center; justify-content: space-between; }
+.ctrl-val { font-family: var(--font-mono); font-size: 11px; color: var(--accent); }
+
+/* ─── BUTTONS ─── */
+.btn {
+  padding: 8px 14px; border-radius: 6px; border: 1px solid var(--border2);
+  cursor: pointer; font-family: var(--font-mono); font-size: 11px; font-weight: 500;
+  transition: all 0.15s; background: var(--bg4); color: var(--text);
+}
+.btn:hover { border-color: var(--accent); color: var(--accent); }
+.btn.primary { background: var(--accent); color: #000; border-color: var(--accent); font-weight: 600; }
+.btn.primary:hover { background: #00b8e6; }
+.btn.danger { border-color: var(--red); color: var(--red); }
+.btn.danger:hover { background: rgba(255,107,107,0.1); }
+.btn.active { background: rgba(0,212,255,0.1); border-color: var(--accent); color: var(--accent); }
+.btn-group { display: flex; gap: 6px; flex-wrap: wrap; }
+.btn-full { width: 100%; text-align: center; }
+
+/* ─── THREAD CARDS ─── */
+#threadCardsContainer {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px;
+}
+.thread-card {
+  background: var(--bg4); border: 1px solid var(--border2);
+  border-radius: 8px; padding: 10px; position: relative; transition: border-color 0.2s;
+}
+.thread-card:hover { border-color: var(--border2); }
+.thread-card.state-running { border-color: rgba(6,214,160,0.4); background: rgba(6,214,160,0.04); }
+.thread-card.state-waiting { border-color: rgba(255,107,107,0.4); background: rgba(255,107,107,0.04); }
+.thread-card.state-ready { border-color: rgba(255,209,102,0.4); background: rgba(255,209,102,0.04); }
+.thread-card.state-terminated { opacity: 0.4; }
+
+.tc-header { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+.tc-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.tc-name { font-family: var(--font-mono); font-size: 12px; font-weight: 600; flex: 1; }
+.tc-state { font-size: 8px; font-family: var(--font-mono); padding: 2px 5px; border-radius: 3px; background: var(--bg3); color: var(--text-muted); }
+.tc-body { display: flex; flex-direction: column; gap: 3px; margin-bottom: 8px; }
+.tc-row { display: flex; justify-content: space-between; font-size: 10px; color: var(--text-dim); }
+.tc-row span:last-child { font-family: var(--font-mono); color: var(--text); }
+.tc-progress { height: 3px; background: var(--bg); border-radius: 2px; overflow: hidden; }
+.tc-progress-bar { height: 100%; border-radius: 2px; transition: width 0.3s; }
+.tc-kt { font-size: 9px; font-family: var(--font-mono); color: var(--text-muted); margin-top: 5px; }
+.tc-remove {
+  position: absolute; top: 6px; right: 6px;
+  background: none; border: none; color: var(--text-muted); cursor: pointer;
+  font-size: 9px; opacity: 0; transition: opacity 0.2s;
+}
+.thread-card:hover .tc-remove { opacity: 1; }
+.tc-remove:hover { color: var(--red); }
+
+/* ─── GANTT ─── */
+.gantt-chart { overflow-x: auto; }
+.gantt-row { display: flex; align-items: center; gap: 0; min-height: 24px; }
+.gantt-header .gantt-label { font-size: 9px; color: var(--text-muted); font-family: var(--font-mono); }
+.gantt-label { width: 40px; flex-shrink: 0; font-family: var(--font-mono); font-size: 10px; font-weight: 600; padding-right: 6px; }
+.gantt-timeline { display: flex; gap: 1px; flex: 1; }
+.gantt-tick-label { width: 16px; text-align: center; font-size: 7px; color: var(--text-muted); font-family: var(--font-mono); }
+.gantt-cell { width: 16px; height: 18px; border-radius: 2px; background: var(--bg4); border: 1px solid var(--border); flex-shrink: 0; }
+.gantt-cell.active { border-color: transparent; }
+.gantt-cell.waiting { background: rgba(255,107,107,0.2); }
+.gantt-cell.ready { background: rgba(255,209,102,0.15); }
+.gantt-empty { color: var(--text-muted); font-family: var(--font-mono); font-size: 11px; padding: 20px; text-align: center; }
+
+/* ─── KERNEL VIEW ─── */
+.kv-grid { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; }
+.kv-cpu {
+  background: var(--bg4); border: 1px solid var(--border2); border-radius: 8px;
+  padding: 10px 14px; min-width: 80px; text-align: center; transition: border-color 0.2s;
+}
+.kv-cpu.active { border-color: var(--green); background: rgba(6,214,160,0.05); }
+.kv-cpu-label { font-size: 9px; font-family: var(--font-mono); color: var(--text-muted); margin-bottom: 4px; }
+.kv-running { font-family: var(--font-mono); font-size: 13px; font-weight: 700; }
+.kv-idle { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); }
+.kv-idle-small { font-family: var(--font-mono); font-size: 9px; color: var(--text-muted); }
+.kv-sep { width: 100%; height: 1px; background: var(--border); }
+.kv-kt { background: var(--bg4); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; }
+.kv-kt-label { font-size: 9px; font-family: var(--font-mono); color: var(--accent); margin-bottom: 5px; }
+.kv-ut-list { display: flex; gap: 4px; flex-wrap: wrap; }
+.kv-ut-badge { font-size: 9px; font-family: var(--font-mono); padding: 2px 6px; border-radius: 3px; border: 1px solid; }
+.kv-queue { background: var(--bg4); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; }
+.kv-queue-label { font-size: 9px; font-family: var(--font-mono); color: var(--yellow); margin-bottom: 5px; }
+.kv-queue-items { display: flex; gap: 4px; flex-wrap: wrap; }
+.kv-queue-item { font-size: 9px; font-family: var(--font-mono); padding: 2px 6px; border-radius: 3px; border: 1px solid; }
+
+/* ─── LOGS ─── */
+.log-entry {
+  display: flex; gap: 8px; padding: 3px 0; border-bottom: 1px solid var(--border);
+  font-family: var(--font-mono); font-size: 10px; align-items: baseline;
+}
+.log-tick { color: var(--accent); opacity: 0.6; flex-shrink: 0; min-width: 28px; }
+.log-msg { color: var(--text-dim); line-height: 1.4; }
+.log-entry.highlight .log-msg { color: var(--accent); }
+
+/* ─── CHARTS ─── */
+.chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.chart-wrap { position: relative; height: 160px; }
+.chart-small { position: relative; height: 140px; }
+
+/* ─── STATE LEGEND ─── */
+.state-legend { display: flex; gap: 12px; flex-wrap: wrap; }
+.legend-item { display: flex; align-items: center; gap: 5px; font-size: 10px; font-family: var(--font-mono); color: var(--text-dim); }
+.legend-dot { width: 8px; height: 8px; border-radius: 50%; }
+
+/* ─── MODEL EXPLANATION ─── */
+#modelExplanation {
+  font-size: 10px; font-family: var(--font-mono); color: var(--text-muted);
+  padding: 8px; background: var(--bg4); border-radius: 5px; border-left: 2px solid var(--accent);
+  line-height: 1.5;
+}
+
+/* ─── SYNC TAB ─── */
+.sync-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding: 16px; }
+.sync-full { grid-column: 1 / -1; }
+
+/* PRODUCER-CONSUMER */
+.pc-buffer { display: flex; gap: 6px; flex-wrap: wrap; margin: 10px 0; }
+.pc-slot {
+  width: 44px; height: 44px; border-radius: 6px; border: 1px solid var(--border2);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-mono); font-size: 12px; font-weight: 600;
+  transition: all 0.3s;
+}
+.pc-slot.filled { background: rgba(0,212,255,0.1); border-color: var(--accent); color: var(--accent); }
+.pc-slot.empty { background: var(--bg4); color: var(--text-muted); }
+
+.sem-display { padding: 10px; background: var(--bg4); border-radius: 6px; border: 1px solid var(--border); }
+.sem-name { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); margin-bottom: 4px; }
+.sem-value { font-family: var(--font-mono); font-size: 18px; font-weight: 700; color: var(--accent); }
+.sem-bar { height: 4px; background: var(--bg); border-radius: 2px; margin: 5px 0; overflow: hidden; }
+.sem-fill { height: 100%; background: var(--accent); border-radius: 2px; transition: width 0.3s; }
+.sem-queue { font-family: var(--font-mono); font-size: 9px; color: var(--text-muted); }
+
+.sem-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+
+.pc-agents { display: flex; gap: 8px; flex-wrap: wrap; }
+.pc-agent {
+  padding: 6px 10px; border-radius: 5px; border: 1px solid var(--border2);
+  font-family: var(--font-mono); font-size: 10px; display: flex; flex-direction: column; gap: 2px;
+  background: var(--bg4);
+}
+.pc-agent.producer { border-color: rgba(0,212,255,0.3); }
+.pc-agent.consumer { border-color: rgba(168,85,247,0.3); }
+.pc-agent.produced { background: rgba(6,214,160,0.1); border-color: var(--green); }
+.pc-agent.consumed { background: rgba(168,85,247,0.1); border-color: var(--purple); }
+
+/* DINING PHILOSOPHERS */
+#dpCanvas { display: block; margin: 0 auto; border-radius: 8px; background: var(--bg4); border: 1px solid var(--border); }
+
+/* ─── MONITOR TAB ─── */
+.mon-state { display: flex; flex-direction: column; gap: 6px; font-family: var(--font-mono); font-size: 11px; padding: 10px; background: var(--bg4); border-radius: 6px; border: 1px solid var(--border); }
+.mon-state strong { color: var(--accent); }
+.mon-hist { margin-top: 8px; }
+
+/* ─── COMPARE TAB ─── */
+.compare-layout { padding: 16px; display: flex; flex-direction: column; gap: 16px; }
+.compare-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.compare-card {
+  background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 14px; display: flex; flex-direction: column; gap: 10px;
+}
+.compare-card h3 { font-family: var(--font-mono); font-size: 12px; color: var(--accent); }
+.compare-badge {
+  display: inline-block; padding: 3px 8px; border-radius: 4px; font-size: 9px;
+  font-family: var(--font-mono); font-weight: 600;
+}
+.badge-green { background: rgba(6,214,160,0.15); color: var(--green); }
+.badge-yellow { background: rgba(255,209,102,0.15); color: var(--yellow); }
+.badge-red { background: rgba(255,107,107,0.15); color: var(--red); }
+.compare-table { font-size: 10px; font-family: var(--font-mono); }
+.compare-table tr td { padding: 4px 0; border-bottom: 1px solid var(--border); color: var(--text-dim); }
+.compare-table tr td:first-child { color: var(--text-muted); padding-right: 10px; }
+.compare-table tr td:last-child { color: var(--text); }
+
+/* ─── EMPTY HINT ─── */
+.empty-hint { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); padding: 30px; text-align: center; border: 1px dashed var(--border2); border-radius: 8px; }
+
+/* ─── SCENARIO BUTTONS ─── */
+.scenario-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.scenario-btn {
+  padding: 8px 10px; background: var(--bg4); border: 1px solid var(--border2);
+  border-radius: 6px; cursor: pointer; text-align: left;
+  font-family: var(--font-mono); font-size: 10px; color: var(--text-dim);
+  transition: all 0.15s;
+}
+.scenario-btn:hover { border-color: var(--accent); color: var(--accent); background: rgba(0,212,255,0.05); }
+.scenario-btn strong { display: block; color: var(--text); font-size: 11px; margin-bottom: 2px; }
+
+/* ─── THEME TOGGLE ─── */
+#themeToggle {
+  padding: 6px 12px; background: var(--bg4); border: 1px solid var(--border2);
+  border-radius: 6px; cursor: pointer; font-family: var(--font-mono); font-size: 10px;
+  color: var(--text-muted); transition: all 0.2s;
+}
+#themeToggle:hover { color: var(--text); border-color: var(--border2); }
+
+/* ─── PULSE ANIMATION ─── */
+@keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.5; } }
+.pulse { animation: pulse 1.5s ease-in-out infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin { animation: spin 2s linear infinite; }
+@keyframes slideIn { from { transform: translateY(4px); opacity:0; } to { transform: none; opacity:1; } }
+.thread-card { animation: slideIn 0.2s ease; }
+
+/* ─── SCROLLABLE LOG ─── */
+.log-scroll { max-height: 200px; overflow-y: auto; display: flex; flex-direction: column; gap: 1px; }
+
+/* ─── FLEX ROW ─── */
+.flex-row { display: flex; gap: 10px; align-items: center; }
+.flex-col { display: flex; flex-direction: column; gap: 8px; }
+.grow { flex: 1; }
+</style>
+</head>
+<body>
+
+<!-- ─── TOPBAR ─── -->
+<div class="topbar">
+  <div class="topbar-brand">
+    <div class="topbar-logo">⊕</div>
+    <div>
+      <div class="topbar-title">ThreadOS Simulator</div>
+      <div class="topbar-sub">Real-Time Multi-threaded Visualization</div>
+    </div>
+  </div>
+  <div class="topbar-stats">
+    <div class="stat-pill"><div class="dot dot-accent"></div>Tick <strong id="statTick">0</strong></div>
+    <div class="stat-pill"><div class="dot dot-green pulse"></div>Active <strong id="statActive">0</strong></div>
+    <div class="stat-pill"><div class="dot dot-yellow"></div>Done <strong id="statDone">0</strong></div>
+    <div class="stat-pill">CPU <strong id="statCpuUtil">0%</strong></div>
+    <div class="stat-pill">Throughput <strong id="statThroughput">0</strong></div>
+    <div class="stat-pill">Avg Wait <strong id="statAvgWait">0</strong></div>
+  </div>
+  <div class="topbar-right">
+    <button id="themeToggle">☀ Light</button>
+  </div>
+</div>
+
+<!-- ─── TABS ─── -->
+<div class="tabs">
+  <button class="tab-btn active" data-tab="main">⚙ Simulation</button>
+  <button class="tab-btn" data-tab="sync">🔒 Synchronization</button>
+  <button class="tab-btn" data-tab="compare">≋ Model Compare</button>
+  <button class="tab-btn" data-tab="about">ⓘ Concepts</button>
+</div>
+
+<!-- ═══════════════════════════════════════════════════ TAB: MAIN ═══ -->
+<div id="tab-main" class="tab-panel active">
+<div class="layout">
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+
+    <!-- Config -->
+    <div class="panel">
+      <div class="panel-header"><span class="panel-title">Configuration</span></div>
+      <div class="panel-body flex-col">
+
+        <div class="ctrl-group">
+          <label class="ctrl-label">Threading Model</label>
+          <select class="ctrl-select" id="modelSelect">
+            <option value="one-to-one">One-to-One (1:1)</option>
+            <option value="many-to-one">Many-to-One (M:1)</option>
+            <option value="many-to-many">Many-to-Many (M:N)</option>
+          </select>
+          <div id="modelExplanation">Each user thread maps to exactly one kernel thread. True parallelism with higher overhead.</div>
+        </div>
+
+        <div class="ctrl-group">
+          <label class="ctrl-label">Scheduling Algorithm</label>
+          <select class="ctrl-select" id="schedSelect">
+            <option value="round-robin">Round Robin</option>
+            <option value="priority">Priority Scheduling</option>
+            <option value="fcfs">FCFS</option>
+          </select>
+        </div>
+
+        <div class="ctrl-group">
+          <div class="ctrl-row">
+            <label class="ctrl-label">Time Quantum</label>
+            <span class="ctrl-val" id="quantumVal">3</span>
+          </div>
+          <input type="range" class="ctrl-range" id="quantumInput" min="1" max="10" value="3">
+        </div>
+
+        <div class="ctrl-group">
+          <div class="ctrl-row">
+            <label class="ctrl-label">Sim Speed</label>
+            <span class="ctrl-val" id="speedVal">Med</span>
+          </div>
+          <input type="range" class="ctrl-range" id="speedSlider" min="100" max="1200" value="600" step="100">
+        </div>
+
+        <div class="ctrl-group">
+          <label class="ctrl-label">CPU Cores</label>
+          <select class="ctrl-select" id="cpuCount">
+            <option value="1">1 CPU</option>
+            <option value="2">2 CPUs</option>
+            <option value="4">4 CPUs</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Controls -->
+    <div class="panel">
+      <div class="panel-header"><span class="panel-title">Simulation Controls</span></div>
+      <div class="panel-body flex-col">
+        <div class="btn-group">
+          <button class="btn primary grow" id="btnStart">▶ Start</button>
+          <button class="btn grow" id="btnPause">⏸ Pause</button>
+        </div>
+        <div class="btn-group">
+          <button class="btn grow" id="btnStep">⏭ Step</button>
+          <button class="btn danger grow" id="btnReset">↺ Reset</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add Thread -->
+    <div class="panel">
+      <div class="panel-header"><span class="panel-title">Add Thread</span></div>
+      <div class="panel-body flex-col">
+        <div class="ctrl-group">
+          <label class="ctrl-label">Name</label>
+          <input type="text" class="ctrl-input" id="threadName" placeholder="T1, Worker, etc.">
+        </div>
+        <div class="flex-row">
+          <div class="ctrl-group grow">
+            <label class="ctrl-label">Priority (1-5)</label>
+            <input type="number" class="ctrl-input" id="threadPriority" value="1" min="1" max="5">
+          </div>
+          <div class="ctrl-group grow">
+            <label class="ctrl-label">Burst (ticks)</label>
+            <input type="number" class="ctrl-input" id="threadBurst" value="" min="1" max="20" placeholder="rand">
+          </div>
+        </div>
+        <button class="btn primary btn-full" id="btnAddThread">+ Add Thread</button>
+      </div>
+    </div>
+
+    <!-- Preloaded Scenarios -->
+    <div class="panel">
+      <div class="panel-header"><span class="panel-title">Preloaded Scenarios</span></div>
+      <div class="panel-body">
+        <div class="scenario-grid">
+          <button class="scenario-btn" data-scenario="default"><strong>Default</strong>3 threads, RR</button>
+          <button class="scenario-btn" data-scenario="highload"><strong>High Load</strong>6 threads</button>
+          <button class="scenario-btn" data-scenario="priority"><strong>Priority</strong>4 threads P-sched</button>
+          <button class="scenario-btn" data-scenario="io"><strong>I/O Bound</strong>4 threads, I/O</button>
+          <button class="scenario-btn" data-scenario="manyToOne"><strong>Many-to-One</strong>4→1 kernel</button>
+          <button class="scenario-btn" data-scenario="manyToMany"><strong>Many-to-Many</strong>5→3 kernel</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- UI Log -->
+    <div class="panel">
+      <div class="panel-header"><span class="panel-title">Quick Log</span></div>
+      <div class="panel-body">
+        <div class="log-scroll" id="uiLog"></div>
+      </div>
+    </div>
+
+  </div><!-- /sidebar -->
+
+  <!-- MAIN AREA -->
+  <div class="main-area">
+
+    <!-- Thread State Legend -->
+    <div class="state-legend">
+      <div class="legend-item"><div class="legend-dot" style="background:#06d6a0"></div>Running</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#ffd166"></div>Ready</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#ff6b6b"></div>Waiting</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#f97316"></div>Blocked</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#666"></div>Terminated</div>
+    </div>
+
+    <!-- Thread Cards -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">User Threads</span>
+        <span style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted)">Live State View</span>
+      </div>
+      <div class="panel-body">
+        <div id="threadCardsContainer"><div class="empty-hint">Add threads using the control panel or load a scenario</div></div>
+      </div>
+    </div>
+
+    <!-- Kernel / CPU View -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Kernel Threads & CPU Mapping</span>
+        <span style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted)" id="modelLabel">one-to-one</span>
+      </div>
+      <div class="panel-body">
+        <div id="kernelViewContainer"><div class="kv-idle">No threads yet</div></div>
+      </div>
+    </div>
+
+    <!-- Gantt Timeline -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Execution Timeline (Gantt)</span>
+        <span style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted)">Last 40 ticks</span>
+      </div>
+      <div class="panel-body">
+        <div id="ganttContainer"><div class="gantt-empty">Timeline will appear once simulation starts</div></div>
+      </div>
+    </div>
+
+    <!-- Charts Row -->
+    <div class="chart-grid">
+      <div class="panel">
+        <div class="panel-header"><span class="panel-title">CPU Utilization</span></div>
+        <div class="panel-body"><div class="chart-wrap"><canvas id="cpuUtilChart"></canvas></div></div>
+      </div>
+      <div class="panel">
+        <div class="panel-header"><span class="panel-title">Avg Wait Time</span></div>
+        <div class="panel-body"><div class="chart-wrap"><canvas id="waitTimeChart"></canvas></div></div>
+      </div>
+    </div>
+
+    <!-- State Dist + Logs -->
+    <div class="chart-grid">
+      <div class="panel">
+        <div class="panel-header"><span class="panel-title">Thread State Distribution</span></div>
+        <div class="panel-body"><div class="chart-small"><canvas id="stateDistChart"></canvas></div></div>
+      </div>
+      <div class="panel">
+        <div class="panel-header"><span class="panel-title">Event Log</span></div>
+        <div class="panel-body"><div class="log-scroll" id="logsContainer"></div></div>
+      </div>
+    </div>
+
+  </div><!-- /main-area -->
+</div>
+</div><!-- /tab-main -->
+
+<!-- ═══════════════════════════════════════════════ TAB: SYNC ═══ -->
+<div id="tab-sync" class="tab-panel">
+<div class="sync-layout">
+
+  <!-- Producer-Consumer -->
+  <div class="panel sync-full">
+    <div class="panel-header">
+      <span class="panel-title">Producer-Consumer (Semaphore)</span>
+      <div class="btn-group">
+        <input type="number" class="ctrl-input" id="pcBufferSize" value="5" min="2" max="10" style="width:60px" placeholder="Buf">
+        <input type="number" class="ctrl-input" id="pcProducers" value="2" min="1" max="4" style="width:50px" placeholder="P">
+        <input type="number" class="ctrl-input" id="pcConsumers" value="2" min="1" max="4" style="width:50px" placeholder="C">
+        <button class="btn primary" id="btnStartPC">▶ Start</button>
+        <button class="btn danger" id="btnStopPC">■ Stop</button>
+      </div>
+    </div>
+    <div class="panel-body flex-col">
+      <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted)">Shared Buffer</div>
+      <div class="pc-buffer" id="pcBuffer"></div>
+      <div class="sem-grid">
+        <div class="sem-display" id="pcSemMutex"></div>
+        <div class="sem-display" id="pcSemEmpty"></div>
+        <div class="sem-display" id="pcSemFull"></div>
+      </div>
+      <div class="flex-row" style="gap:16px;align-items:flex-start">
+        <div class="flex-col grow">
+          <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted)">Producers</div>
+          <div class="pc-agents" id="pcProducerStates"></div>
+        </div>
+        <div class="flex-col grow">
+          <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted)">Consumers</div>
+          <div class="pc-agents" id="pcConsumerStates"></div>
+        </div>
+        <div class="flex-col grow">
+          <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted)">Event Log</div>
+          <div class="log-scroll" id="pcLog"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Dining Philosophers -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">Dining Philosophers</span>
+      <div class="btn-group">
+        <select class="ctrl-select" id="dpCount" style="width:80px">
+          <option value="5">5</option>
+          <option value="3">3</option>
+          <option value="7">7</option>
+        </select>
+        <button class="btn primary" id="btnStartDP">▶ Start</button>
+        <button class="btn danger" id="btnStopDP">■ Stop</button>
+      </div>
+    </div>
+    <div class="panel-body">
+      <canvas id="dpCanvas" width="320" height="320"></canvas>
+    </div>
+  </div>
+
+  <!-- DP Log -->
+  <div class="panel">
+    <div class="panel-header"><span class="panel-title">Philosopher Events</span></div>
+    <div class="panel-body"><div class="log-scroll" id="dpLog"></div></div>
+  </div>
+
+  <!-- Manual Semaphore -->
+  <div class="panel">
+    <div class="panel-header"><span class="panel-title">Manual Semaphore (val=2)</span></div>
+    <div class="panel-body flex-col">
+      <div class="flex-row">
+        <input type="number" class="ctrl-input" id="semThreadId" value="1" min="1" max="10" style="width:70px" placeholder="T ID">
+        <button class="btn" id="btnSemWait">wait() P()</button>
+        <button class="btn primary" id="btnSemSignal">signal() V()</button>
+      </div>
+      <div id="manualSemDisplay"></div>
+      <div class="log-scroll" id="semHistory"></div>
+    </div>
+  </div>
+
+  <!-- Manual Monitor -->
+  <div class="panel">
+    <div class="panel-header"><span class="panel-title">Manual Monitor</span></div>
+    <div class="panel-body flex-col">
+      <div class="flex-row">
+        <input type="number" class="ctrl-input" id="monThreadId" value="1" min="1" max="10" style="width:70px" placeholder="T ID">
+        <button class="btn" id="btnMonEnter">enter()</button>
+        <button class="btn primary" id="btnMonExit">exit()</button>
+      </div>
+      <div id="manualMonDisplay"><div class="mon-state"><div>Lock: <strong>free</strong></div><div>Entry queue: empty</div></div></div>
+    </div>
+  </div>
+
+</div>
+</div><!-- /tab-sync -->
+
+<!-- ════════════════════════════════════════════ TAB: COMPARE ═══ -->
+<div id="tab-compare" class="tab-panel">
+<div class="compare-layout">
+  <div>
+    <h2 style="font-family:var(--font-mono);font-size:14px;color:var(--text);margin-bottom:4px">Threading Model Comparison</h2>
+    <p style="font-size:11px;color:var(--text-muted)">Side-by-side analysis of the three major multithreading models</p>
+  </div>
+  <div class="compare-grid">
+
+    <div class="compare-card">
+      <h3>Many-to-One (M:1)</h3>
+      <div><span class="compare-badge badge-yellow">Limited Parallelism</span></div>
+      <p style="font-size:10px;color:var(--text-dim);line-height:1.6">Multiple user-level threads are mapped to a single kernel thread. The thread library manages scheduling entirely in user space.</p>
+      <table class="compare-table"><tbody>
+        <tr><td>Parallelism</td><td>❌ None (1 CPU at a time)</td></tr>
+        <tr><td>Overhead</td><td>✅ Very low</td></tr>
+        <tr><td>I/O Blocking</td><td>❌ Blocks all threads</td></tr>
+        <tr><td>Portability</td><td>✅ High</td></tr>
+        <tr><td>Kernel Threads</td><td>1 per process</td></tr>
+        <tr><td>Examples</td><td>Green threads, early JVM</td></tr>
+      </tbody></table>
+      <div style="font-size:9px;font-family:var(--font-mono);color:var(--text-muted);padding:6px;background:var(--bg4);border-radius:4px">
+        UT1 ─┐<br>UT2 ─┤→ KT1 → CPU<br>UT3 ─┘
+      </div>
+    </div>
+
+    <div class="compare-card">
+      <h3>One-to-One (1:1)</h3>
+      <div><span class="compare-badge badge-green">True Parallelism</span></div>
+      <p style="font-size:10px;color:var(--text-dim);line-height:1.6">Each user-level thread is mapped to its own kernel thread. The OS scheduler handles all thread scheduling directly.</p>
+      <table class="compare-table"><tbody>
+        <tr><td>Parallelism</td><td>✅ True (multi-CPU)</td></tr>
+        <tr><td>Overhead</td><td>⚠ Higher (kernel threads)</td></tr>
+        <tr><td>I/O Blocking</td><td>✅ Only affects 1 thread</td></tr>
+        <tr><td>Portability</td><td>⚠ OS-dependent</td></tr>
+        <tr><td>Kernel Threads</td><td>1 per user thread</td></tr>
+        <tr><td>Examples</td><td>Linux pthreads, Windows threads</td></tr>
+      </tbody></table>
+      <div style="font-size:9px;font-family:var(--font-mono);color:var(--text-muted);padding:6px;background:var(--bg4);border-radius:4px">
+        UT1 → KT1 → CPU1<br>UT2 → KT2 → CPU2<br>UT3 → KT3 → CPU3
+      </div>
+    </div>
+
+    <div class="compare-card">
+      <h3>Many-to-Many (M:N)</h3>
+      <div><span class="compare-badge badge-green">Best Balance</span></div>
+      <p style="font-size:10px;color:var(--text-dim);line-height:1.6">Many user-level threads are multiplexed onto a smaller or equal number of kernel threads. Offers flexibility and performance.</p>
+      <table class="compare-table"><tbody>
+        <tr><td>Parallelism</td><td>✅ Yes (bounded)</td></tr>
+        <tr><td>Overhead</td><td>✅ Balanced</td></tr>
+        <tr><td>I/O Blocking</td><td>✅ Minimal impact</td></tr>
+        <tr><td>Portability</td><td>✅ Good</td></tr>
+        <tr><td>Kernel Threads</td><td>Pool (fewer than UTs)</td></tr>
+        <tr><td>Examples</td><td>Solaris, Go goroutines</td></tr>
+      </tbody></table>
+      <div style="font-size:9px;font-family:var(--font-mono);color:var(--text-muted);padding:6px;background:var(--bg4);border-radius:4px">
+        UT1 ─┐<br>UT2 ─┤→ KT1 → CPU1<br>UT3 ─┤→ KT2 → CPU2<br>UT4 ─┘
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header"><span class="panel-title">Scheduling Algorithm Comparison</span></div>
+    <div class="panel-body">
+      <div class="compare-grid">
+        <div>
+          <h4 style="font-family:var(--font-mono);font-size:11px;color:var(--accent);margin-bottom:8px">Round Robin (RR)</h4>
+          <p style="font-size:10px;color:var(--text-dim);line-height:1.6">Each thread gets a fixed time quantum. After quantum expires, thread is preempted and next in queue runs. Fair, prevents starvation, good for interactive systems.</p>
+        </div>
+        <div>
+          <h4 style="font-family:var(--font-mono);font-size:11px;color:var(--yellow);margin-bottom:8px">Priority Scheduling</h4>
+          <p style="font-size:10px;color:var(--text-dim);line-height:1.6">Higher priority threads run first. Can cause starvation of low-priority threads. Used in real-time systems where critical tasks must run immediately.</p>
+        </div>
+        <div>
+          <h4 style="font-family:var(--font-mono);font-size:11px;color:var(--green);margin-bottom:8px">FCFS (First-Come-First-Served)</h4>
+          <p style="font-size:10px;color:var(--text-dim);line-height:1.6">Threads run to completion in arrival order. Simple but can cause convoy effect where short jobs wait behind long ones. Non-preemptive.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header"><span class="panel-title">Semaphore vs Monitor</span></div>
+    <div class="panel-body">
+      <div class="compare-grid">
+        <div style="grid-column:1/2">
+          <h4 style="font-family:var(--font-mono);font-size:11px;color:var(--accent);margin-bottom:8px">Semaphore</h4>
+          <p style="font-size:10px;color:var(--text-dim);line-height:1.6;margin-bottom:8px">A synchronization primitive with an integer counter. Two atomic operations: <code>wait()</code> decrements and blocks if zero; <code>signal()</code> increments and wakes a waiter.</p>
+          <ul style="font-size:10px;color:var(--text-dim);padding-left:16px;line-height:1.8">
+            <li>Binary semaphore = mutex (0 or 1)</li>
+            <li>Counting semaphore = resource pool</li>
+            <li>Low-level, error-prone</li>
+            <li>Must be used carefully to avoid deadlock</li>
+          </ul>
+        </div>
+        <div style="grid-column:2/4">
+          <h4 style="font-family:var(--font-mono);font-size:11px;color:var(--green);margin-bottom:8px">Monitor</h4>
+          <p style="font-size:10px;color:var(--text-dim);line-height:1.6;margin-bottom:8px">High-level synchronization construct. Encapsulates shared data with mutually exclusive access. Only one thread can be inside a monitor at a time. Condition variables allow threads to wait inside.</p>
+          <ul style="font-size:10px;color:var(--text-dim);padding-left:16px;line-height:1.8">
+            <li>Automatic mutual exclusion on entry</li>
+            <li>Condition variables: <code>wait()</code>, <code>signal()</code>, <code>broadcast()</code></li>
+            <li>Higher-level, less error-prone than semaphores</li>
+            <li>Java <code>synchronized</code> blocks are monitors</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</div><!-- /tab-compare -->
+
+<!-- ════════════════════════════════════════════════ TAB: ABOUT ═══ -->
+<div id="tab-about" class="tab-panel">
+<div class="compare-layout">
+  <div class="panel">
+    <div class="panel-header"><span class="panel-title">OS Concepts Reference</span></div>
+    <div class="panel-body flex-col" style="gap:16px">
+      <div>
+        <h3 style="font-family:var(--font-mono);font-size:12px;color:var(--accent);margin-bottom:6px">Thread Lifecycle States</h3>
+        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px">
+          <div style="text-align:center;padding:10px;background:rgba(6,214,160,0.1);border:1px solid var(--green);border-radius:6px">
+            <div style="font-family:var(--font-mono);font-size:11px;color:var(--green);font-weight:600">RUNNING</div>
+            <div style="font-size:10px;color:var(--text-dim);margin-top:4px">Thread is actively executing on CPU</div>
+          </div>
+          <div style="text-align:center;padding:10px;background:rgba(255,209,102,0.1);border:1px solid var(--yellow);border-radius:6px">
+            <div style="font-family:var(--font-mono);font-size:11px;color:var(--yellow);font-weight:600">READY</div>
+            <div style="font-size:10px;color:var(--text-dim);margin-top:4px">Waiting in queue for CPU allocation</div>
+          </div>
+          <div style="text-align:center;padding:10px;background:rgba(255,107,107,0.1);border:1px solid var(--red);border-radius:6px">
+            <div style="font-family:var(--font-mono);font-size:11px;color:var(--red);font-weight:600">WAITING</div>
+            <div style="font-size:10px;color:var(--text-dim);margin-top:4px">Waiting for I/O or event completion</div>
+          </div>
+          <div style="text-align:center;padding:10px;background:rgba(249,115,22,0.1);border:1px solid var(--orange);border-radius:6px">
+            <div style="font-family:var(--font-mono);font-size:11px;color:var(--orange);font-weight:600">BLOCKED</div>
+            <div style="font-size:10px;color:var(--text-dim);margin-top:4px">Blocked on resource or lock</div>
+          </div>
+          <div style="text-align:center;padding:10px;background:rgba(102,102,102,0.1);border:1px solid #666;border-radius:6px">
+            <div style="font-family:var(--font-mono);font-size:11px;color:#999;font-weight:600">TERMINATED</div>
+            <div style="font-size:10px;color:var(--text-dim);margin-top:4px">Execution complete, resources freed</div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <h3 style="font-family:var(--font-mono);font-size:12px;color:var(--accent);margin-bottom:6px">Transition Diagram</h3>
+        <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-dim);background:var(--bg4);padding:14px;border-radius:6px;border:1px solid var(--border);line-height:2">
+          NEW → <span style="color:var(--yellow)">READY</span> (admit)<br>
+          <span style="color:var(--yellow)">READY</span> → <span style="color:var(--green)">RUNNING</span> (scheduler dispatch)<br>
+          <span style="color:var(--green)">RUNNING</span> → <span style="color:var(--yellow)">READY</span> (preemption / quantum expired)<br>
+          <span style="color:var(--green)">RUNNING</span> → <span style="color:var(--red)">WAITING</span> (I/O request, semaphore wait)<br>
+          <span style="color:var(--red)">WAITING</span> → <span style="color:var(--yellow)">READY</span> (I/O complete, signal received)<br>
+          <span style="color:var(--green)">RUNNING</span> → TERMINATED (execution complete)
+        </div>
+      </div>
+
+      <div>
+        <h3 style="font-family:var(--font-mono);font-size:12px;color:var(--accent);margin-bottom:6px">Classic Synchronization Problems</h3>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div style="padding:12px;background:var(--bg4);border-radius:6px;border:1px solid var(--border)">
+            <h4 style="font-family:var(--font-mono);font-size:11px;color:var(--yellow);margin-bottom:6px">Producer-Consumer</h4>
+            <p style="font-size:10px;color:var(--text-dim);line-height:1.6">Producer generates items into a bounded buffer; Consumer removes them. Problems: producer adding to full buffer, consumer removing from empty buffer. Solved with: mutex + empty + full semaphores.</p>
+          </div>
+          <div style="padding:12px;background:var(--bg4);border-radius:6px;border:1px solid var(--border)">
+            <h4 style="font-family:var(--font-mono);font-size:11px;color:var(--purple);margin-bottom:6px">Dining Philosophers</h4>
+            <p style="font-size:10px;color:var(--text-dim);line-height:1.6">5 philosophers alternately think and eat. Must acquire 2 forks to eat. Naive solution causes deadlock. Solution: asymmetric fork ordering (last philosopher picks right first) or using a monitor.</p>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <h3 style="font-family:var(--font-mono);font-size:12px;color:var(--accent);margin-bottom:6px">About This Simulator</h3>
+        <p style="font-size:10px;color:var(--text-dim);line-height:1.7">ThreadOS is a pure JavaScript, browser-based OS threading simulator. All logic runs in the main thread using setInterval for tick-based simulation. No backend required. Modules: <code>simulationEngine.js</code> (core loop), <code>synchronization.js</code> (semaphore/monitor/scenarios), <code>visualization.js</code> (Chart.js + DOM), <code>uiController.js</code> (event handling & wiring).</p>
+      </div>
+    </div>
+  </div>
+</div>
+</div><!-- /tab-about -->
+
+<script src="js/simulationEngine.js"></script>
+<script src="js/synchronization.js"></script>
+<script src="js/visualization.js"></script>
+<script src="js/uiController.js"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    UIController.init();
+  });
+</script>
+</body>
+</html>
