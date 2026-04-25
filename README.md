@@ -69,3 +69,4 @@ Add more scheduling algorithms (SJF, Multilevel Queue)
 Real-time performance comparison
 Advanced UI animations
 Distributed system simulation
+Diagram Comparisons
