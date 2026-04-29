@@ -24,7 +24,7 @@ class Semaphore {
    * Returns true if acquired, false if thread must block
    */
   wait(threadId) {
-    if (this.value > 0) {
+    if (this.value >0) {
       this.value--;
       const entry = { tick: SimEngine.tick, action: 'acquired', threadId, value: this.value };
       this.history.push(entry);
